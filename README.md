@@ -1,1 +1,30 @@
 # 09-21-Lehrerplan
+
+Gangplan der HTL Salzburg (3. Stock, Gänge B, C, D) in Unity. Die Lehrerzimmer sind eingezeichnet;
+ein Klick auf eine Tür zeigt, welche Lehrer:innen im Raum sitzen und unter welcher Telefonnummer
+der Raum erreichbar ist. Die Daten kommen live von https://www.htl-salzburg.ac.at/lehrerinnen.html.
+
+## Starten
+
+Szene `Assets/MyGame/Scenes/Gangplan.unity` öffnen → Play → auf eine Tür klicken.
+Nochmal auf die Tür oder auf das Popup klicken schließt es.
+
+## Scripts (`Assets/MyGame/Scripts`)
+
+| Datei | Aufgabe |
+|---|---|
+| `DoorPopupController.cs` | Hängt an jeder Tür. Liest die Raumnummer aus dem Objektnamen (`Tür B310`), startet das Laden und zeigt das Ergebnis im Popup an. |
+| `HtlTeacherService.cs` | WebRequests + Regex. Lädt die Lehrerliste und die Detailseiten. |
+| `TeacherInfo.cs` | Datenklasse (Name, Raum, Durchwahl, Link). |
+
+## Ablauf WebRequest + Regex
+
+1. `UnityWebRequest.Get("…/lehrerinnen.html")` – die Übersicht enthält nur Name + Link.
+   Regex: `<a class="value" href="(?<link>/lehrerinnen-details/[^"]+)"><span class="text">(?<name>[^<]+)</span>`
+2. Der Raum steht am Ende des Links (`…-b-313.html`).
+   Regex: `-(?<building>[a-z])-(?<number>\d{3})\.html$` → nur Lehrer:innen des geklickten Raums bleiben übrig.
+3. Deren Detailseiten werden parallel geladen; Raum und Durchwahl werden ausgelesen:
+   `<div class="field Telefon">\s*<div class="label">[^<]*</div>\s*<div class="value">\s*<span class="text">(?<value>[^<]*)</span>`
+4. Telefonnummer = `+43 662 453610-` + Durchwahl (Tel-DW).
+
+Die Übersichtsseite wird nur einmal geladen, Ergebnisse pro Raum werden zwischengespeichert.

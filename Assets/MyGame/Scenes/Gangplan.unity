@@ -652,7 +652,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: 'B306
+  m_Text: 'B304
 
     Lehrername'
 --- !u!222 &73738667
@@ -1009,7 +1009,7 @@ GameObject:
   - component: {fileID: 192522043}
   - component: {fileID: 192522042}
   m_Layer: 0
-  m_Name: "T\xFCr B306"
+  m_Name: "T\xFCr B304"
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1937,7 +1937,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: 'B315
+  m_Text: 'B314
 
     Lehrername'
 --- !u!222 &431236454
@@ -2982,7 +2982,7 @@ GameObject:
   - component: {fileID: 935723380}
   - component: {fileID: 935723379}
   m_Layer: 0
-  m_Name: Raum B306
+  m_Name: Raum B304
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3040,7 +3040,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: B306
+  m_Text: B304
 --- !u!222 &935723380
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -3797,7 +3797,7 @@ GameObject:
   - component: {fileID: 1159351771}
   - component: {fileID: 1159351770}
   m_Layer: 0
-  m_Name: Raum B315
+  m_Name: Raum B314
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3855,7 +3855,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: B315
+  m_Text: B314
 --- !u!222 &1159351771
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -5489,7 +5489,7 @@ GameObject:
   - component: {fileID: 1546082769}
   - component: {fileID: 1546082768}
   m_Layer: 0
-  m_Name: Popup B315
+  m_Name: Popup B314
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -7402,7 +7402,7 @@ GameObject:
   - component: {fileID: 1982929384}
   - component: {fileID: 1982929383}
   m_Layer: 0
-  m_Name: Popup B306
+  m_Name: Popup B304
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -7495,7 +7495,7 @@ GameObject:
   - component: {fileID: 2010872266}
   - component: {fileID: 2010872265}
   m_Layer: 0
-  m_Name: "T\xFCr B315"
+  m_Name: "T\xFCr B314"
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
