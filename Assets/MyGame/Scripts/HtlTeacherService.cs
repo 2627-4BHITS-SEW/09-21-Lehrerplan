@@ -1,56 +1,80 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Text.RegularExpressions;
 using UnityEngine.Networking;
 
-/// <summary>
-/// Lädt die Lehrerliste der HTL Salzburg per UnityWebRequest und liest sie mit Regex aus.
-///
-/// Ablauf:
-///  1. Übersichtsseite laden (lehrerinnen.html) – dort stehen nur Name + Link zur Detailseite.
-///     Der Raum steckt am Ende des Links, z.B. ".../feichtinger-daniel-prof-mag-b-313.html".
-///  2. Für alle Lehrer:innen des gesuchten Raums die Detailseite laden und
-///     Raum + Telefon-Durchwahl mit Regex auslesen.
-/// </summary>
+// Holt die Lehrer:innen eines Raums von der HTL-Website.
+//
+// Ablauf:
+//  1. Die Übersichtsseite "lehrerinnen.html" laden. Dort steht pro Lehrer:in nur der Name
+//     und ein Link zur Detailseite. Der Raum steckt am Ende des Links, z.B.
+//     "/lehrerinnen-details/feichtinger-daniel-prof-mag-b-313.html"  ->  Raum B313
+//  2. Für jede Lehrperson im gesuchten Raum die Detailseite laden
+//     und dort Name, Raum und Telefon-Durchwahl auslesen.
 public static class HtlTeacherService
 {
-    public const string BaseUrl = "https://www.htl-salzburg.ac.at";
-    public const string ListUrl = BaseUrl + "/lehrerinnen.html";
-    public const string PhonePrefix = "+43 662 453610-";
+    const string BaseUrl = "https://www.htl-salzburg.ac.at";
+    const string ListUrl = BaseUrl + "/lehrerinnen.html";
+    const string PhonePrefix = "+43 662 453610-";
 
-    // Übersicht: <a class="value" href="/lehrerinnen-details/....html"><span class="text">Name</span></a>
-    static readonly Regex ListEntryRegex = new Regex(
-        @"<a class=""value"" href=""(?<link>/lehrerinnen-details/[^""]+)""><span class=""text"">(?<name>[^<]+)</span>",
-        RegexOptions.Compiled);
+    // ---------------------------------------------------------------------
+    // Regex 1: ein Eintrag auf der Übersichtsseite
+    //
+    // Der HTML-Code sieht so aus:
+    //   <a class="value" href="/lehrerinnen-details/mueller-...-b-313.html"><span class="text">Müller Hans</span>
+    //
+    //   (?<link>/lehrerinnen-details/[^"]+)  -> merkt sich den Link als "link".
+    //                                           [^"]+ = alle Zeichen bis zum nächsten "
+    //   (?<name>[^<]+)                       -> merkt sich den Namen als "name".
+    //                                           [^<]+ = alle Zeichen bis zum nächsten <
+    //
+    // In C# muss man in einem @"..." String ein " doppelt schreiben, deshalb steht da "".
+    // ---------------------------------------------------------------------
+    static Regex listEntryRegex = new Regex(
+        @"<a class=""value"" href=""(?<link>/lehrerinnen-details/[^""]+)""><span class=""text"">(?<name>[^<]+)</span>");
 
-    // Raum am Ende des Links: "-b-313.html"
-    static readonly Regex LinkRoomRegex = new Regex(
-        @"-(?<building>[a-z])-(?<number>\d{3})\.html$",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    // ---------------------------------------------------------------------
+    // Regex 2: eine Raumnummer finden, z.B. in "Tür B310", "b 313", "-b-313.html"
+    //
+    //   (?<building>[A-Za-z])  -> ein Buchstabe = Gebäude/Gang (B, C, D ...)
+    //   [\s-]*                 -> danach beliebig viele Leerzeichen oder Bindestriche
+    //   (?<number>\d{3})       -> genau drei Ziffern = Raumnummer (\d = Ziffer)
+    // ---------------------------------------------------------------------
+    static Regex roomRegex = new Regex(@"(?<building>[A-Za-z])[\s-]*(?<number>\d{3})");
 
-    // Raumnummer in beliebiger Schreibweise: "B 313", "b313", "Tür B313"
-    static readonly Regex RoomRegex = new Regex(
-        @"(?<building>[A-Za-z])\s*(?<number>\d{3})",
-        RegexOptions.Compiled);
+    // Die Übersichtsseite (wird nur einmal geladen und dann gemerkt)
+    static string listHtml = null;
+    static bool listIsLoading = false;
 
-    static string listHtml;
-    static bool listLoading;
-    static readonly Dictionary<string, List<TeacherInfo>> cache = new Dictionary<string, List<TeacherInfo>>();
+    // Schon geladene Räume merken: Raum -> Lehrer:innen
+    static Dictionary<string, List<TeacherInfo>> cache = new Dictionary<string, List<TeacherInfo>>();
 
-    /// <summary>"B 313" / "Tür b313" -> "B313", sonst null.</summary>
+
+    // Macht aus einem Text eine einheitliche Raumnummer.
+    // "Tür b310" -> "B310",  "B 313" -> "B313",  kein Raum gefunden -> null
     public static string NormalizeRoom(string text)
     {
-        if (text == null) return null;
-        Match m = RoomRegex.Match(text);
-        return m.Success ? m.Groups["building"].Value.ToUpper() + m.Groups["number"].Value : null;
+        if (text == null)
+            return null;
+
+        Match match = roomRegex.Match(text);
+        if (!match.Success)
+            return null;
+
+        return match.Groups["building"].Value.ToUpper() + match.Groups["number"].Value;
     }
 
-    public static string FormatPhone(string extension) => PhonePrefix + extension;
+    // Durchwahl "229" -> "+43 662 453610-229"
+    public static string FormatPhone(string extension)
+    {
+        return PhonePrefix + extension;
+    }
 
-    /// <summary>Coroutine: sucht alle Lehrer:innen in einem Raum.</summary>
+
+    // Coroutine: sucht alle Lehrer:innen in einem Raum.
+    // Wenn sie fertig ist, wird onSuccess (mit der Liste) oder onError (mit einer Fehlermeldung) aufgerufen.
     public static IEnumerator LoadTeachersInRoom(string room, Action<List<TeacherInfo>> onSuccess, Action<string> onError)
     {
         room = NormalizeRoom(room);
@@ -60,94 +84,152 @@ public static class HtlTeacherService
             yield break;
         }
 
-        if (cache.TryGetValue(room, out List<TeacherInfo> cached))
+        // Raum schon einmal geladen? Dann das gemerkte Ergebnis verwenden.
+        if (cache.ContainsKey(room))
         {
-            onSuccess(cached);
+            onSuccess(cache[room]);
             yield break;
         }
 
-        // 1. Übersichtsseite nur einmal laden (auch wenn mehrere Räume gleichzeitig angeklickt werden)
-        while (listLoading) yield return null;
+        // ----- Schritt 1: Übersichtsseite laden (nur beim allerersten Mal) -----
+
+        // Lädt gerade eine andere Tür die Übersicht? Dann warten, bis sie fertig ist.
+        while (listIsLoading)
+            yield return null;
+
         if (listHtml == null)
         {
-            listLoading = true;
-            using (UnityWebRequest request = UnityWebRequest.Get(ListUrl))
-            {
-                yield return request.SendWebRequest();
-                listLoading = false;
+            listIsLoading = true;
+            UnityWebRequest listRequest = UnityWebRequest.Get(ListUrl);
+            yield return listRequest.SendWebRequest();
+            listIsLoading = false;
 
-                if (request.result != UnityWebRequest.Result.Success)
-                {
-                    onError("Lehrerliste konnte nicht geladen werden:\n" + request.error);
-                    yield break;
-                }
-                listHtml = request.downloadHandler.text;
+            if (listRequest.result != UnityWebRequest.Result.Success)
+            {
+                onError("Lehrerliste konnte nicht geladen werden:\n" + listRequest.error);
+                listRequest.Dispose();
+                yield break;
             }
+
+            listHtml = listRequest.downloadHandler.text;
+            listRequest.Dispose();
         }
 
-        // Kandidaten anhand des Raums im Link finden
-        var candidates = new List<TeacherInfo>();
-        foreach (Match m in ListEntryRegex.Matches(listHtml))
+        // Alle Einträge der Übersicht durchgehen und die Lehrer:innen des gesuchten Raums sammeln
+        List<TeacherInfo> teachers = new List<TeacherInfo>();
+        foreach (Match match in listEntryRegex.Matches(listHtml))
         {
-            string link = m.Groups["link"].Value;
-            Match linkRoom = LinkRoomRegex.Match(link);
-            if (!linkRoom.Success) continue;
+            string link = match.Groups["link"].Value;
+            string name = match.Groups["name"].Value;
 
-            string candidateRoom = linkRoom.Groups["building"].Value.ToUpper() + linkRoom.Groups["number"].Value;
-            if (candidateRoom != room) continue;
+            // Raum steht am Ende des Links: ".../name-b-313.html" -> "B313"
+            string roomInLink = NormalizeRoom(GetLinkEnding(link));
+            if (roomInLink != room)
+                continue;
 
-            candidates.Add(new TeacherInfo
-            {
-                Name = WebUtility.HtmlDecode(m.Groups["name"].Value).Trim(),
-                Room = candidateRoom,
-                DetailUrl = BaseUrl + link
-            });
+            TeacherInfo teacher = new TeacherInfo();
+            teacher.Name = WebUtility.HtmlDecode(name).Trim();   // z.B. "&uuml;" -> "ü"
+            teacher.Room = roomInLink;
+            teacher.DetailUrl = BaseUrl + link;
+            teachers.Add(teacher);
         }
 
-        // 2. Detailseiten parallel laden
-        List<UnityWebRequest> requests = candidates.Select(c => UnityWebRequest.Get(c.DetailUrl)).ToList();
-        foreach (UnityWebRequest request in requests) request.SendWebRequest();
-        while (requests.Any(r => !r.isDone)) yield return null;
+        // ----- Schritt 2: Detailseiten laden -----
 
-        var teachers = new List<TeacherInfo>();
-        for (int i = 0; i < candidates.Count; i++)
+        // Alle Anfragen gleichzeitig starten (geht schneller als eine nach der anderen)
+        List<UnityWebRequest> requests = new List<UnityWebRequest>();
+        foreach (TeacherInfo teacher in teachers)
         {
-            TeacherInfo teacher = candidates[i];
+            UnityWebRequest request = UnityWebRequest.Get(teacher.DetailUrl);
+            request.SendWebRequest();
+            requests.Add(request);
+        }
+
+        // Warten, bis jede Anfrage fertig ist
+        foreach (UnityWebRequest request in requests)
+        {
+            while (!request.isDone)
+                yield return null;
+        }
+
+        // Ergebnisse auswerten. requests[i] gehört zu teachers[i].
+        List<TeacherInfo> result = new List<TeacherInfo>();
+        for (int i = 0; i < teachers.Count; i++)
+        {
+            TeacherInfo teacher = teachers[i];
             UnityWebRequest request = requests[i];
 
             if (request.result == UnityWebRequest.Result.Success)
             {
                 string html = request.downloadHandler.text;
-                string detailRoom = NormalizeRoom(ReadField(html, "Raum"));
 
-                // Die Detailseite ist aktueller als der Link -> bei anderem Raum überspringen
-                if (detailRoom != null && detailRoom != room)
+                // Die Detailseite ist aktueller als der Link.
+                // Steht dort ein anderer Raum, gehört die Person nicht (mehr) in diesen Raum.
+                string roomOnPage = NormalizeRoom(ReadField(html, "Raum"));
+                if (roomOnPage != null && roomOnPage != room)
                 {
                     request.Dispose();
                     continue;
                 }
-                teacher.Name = ReadField(html, "Lehrername") ?? teacher.Name;
+
+                string fullName = ReadField(html, "Lehrername");
+                if (fullName != null)
+                    teacher.Name = fullName;
+
                 teacher.PhoneExtension = ReadField(html, "Telefon");
             }
-            teachers.Add(teacher);
+            // Falls die Detailseite nicht geladen werden konnte, bleibt die Person
+            // trotzdem in der Liste (nur ohne Telefonnummer).
+
+            result.Add(teacher);
             request.Dispose();
         }
 
-        cache[room] = teachers;
-        onSuccess(teachers);
+        cache[room] = result;
+        onSuccess(result);
     }
 
-    /// <summary>
-    /// Liest ein Feld der Detailseite aus, z.B.
-    /// &lt;div class="field Telefon"&gt;&lt;div class="label"&gt;Tel-DW:&lt;/div&gt;&lt;div class="value"&gt; &lt;span class="text"&gt;229&lt;/span&gt;
-    /// </summary>
-    static string ReadField(string html, string field)
-    {
-        Match m = Regex.Match(html,
-            @"<div class=""field " + field + @""">\s*<div class=""label"">[^<]*</div>\s*<div class=""value"">\s*<span class=""text"">(?<value>[^<]*)</span>");
-        if (!m.Success) return null;
 
-        string value = WebUtility.HtmlDecode(m.Groups["value"].Value).Trim();
-        return value == "" || value == "-" ? null : value;
+    /// <summary>
+    /// Gibt den letzten Teil eines Links zurück, damit nur dort nach dem Raum gesucht wird.
+    /// "/lehrerinnen-details/feichtinger-daniel-prof-mag-b-313.html" -> "b-313.html"
+    /// </summary>
+    static string GetLinkEnding(string link)
+    {
+        // Regex: ein Buchstabe, Bindestrich, drei Ziffern, ".html" ganz am Ende ($ = Ende des Textes)
+        Match match = Regex.Match(link, @"[a-zA-Z]-\d{3}\.html$");
+        if (match.Success)
+            return match.Value;
+        return null;
+    }
+
+    // Liest ein Feld aus einer Detailseite aus. Der HTML-Code sieht z.B. so aus:
+    //
+    //   &lt;div class="field Telefon"&gt;
+    //     &lt;div class="label"&gt;Tel-DW:&lt;/div&gt;
+    //     &lt;div class="value"&gt; &lt;span class="text"&gt;229&lt;/span&gt;
+    //
+    // ReadField(html, "Telefon") gibt dann "229" zurück.
+    // Ist das Feld leer oder "-", kommt null zurück.
+    static string ReadField(string html, string fieldName)
+    {
+        // Regex-Erklärung:
+        //   \s*                 -> beliebig viele Leerzeichen / Zeilenumbrüche
+        //   [^<]*               -> beliebiger Text bis zum nächsten <  (hier: das Label, z.B. "Tel-DW:")
+        //   (?<value>[^<]*)     -> der gesuchte Wert, wird als "value" gemerkt
+        string pattern =
+            @"<div class=""field " + fieldName + @""">\s*" +
+            @"<div class=""label"">[^<]*</div>\s*" +
+            @"<div class=""value"">\s*<span class=""text"">(?<value>[^<]*)</span>";
+
+        Match match = Regex.Match(html, pattern);
+        if (!match.Success)
+            return null;
+
+        string value = WebUtility.HtmlDecode(match.Groups["value"].Value).Trim();
+        if (value == "" || value == "-")
+            return null;
+
+        return value;
     }
 }

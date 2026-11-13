@@ -22,7 +22,8 @@ Nochmal auf die Tür oder auf das Popup klicken schließt es.
 1. `UnityWebRequest.Get("…/lehrerinnen.html")` – die Übersicht enthält nur Name + Link.
    Regex: `<a class="value" href="(?<link>/lehrerinnen-details/[^"]+)"><span class="text">(?<name>[^<]+)</span>`
 2. Der Raum steht am Ende des Links (`…-b-313.html`).
-   Regex: `-(?<building>[a-z])-(?<number>\d{3})\.html$` → nur Lehrer:innen des geklickten Raums bleiben übrig.
+   Regex: `[a-zA-Z]-\d{3}\.html$` schneidet das Ende (`b-313.html`) ab, danach macht
+   `(?<building>[A-Za-z])[\s-]*(?<number>\d{3})` daraus `B313` → nur Lehrer:innen des geklickten Raums bleiben übrig.
 3. Deren Detailseiten werden parallel geladen; Raum und Durchwahl werden ausgelesen:
    `<div class="field Telefon">\s*<div class="label">[^<]*</div>\s*<div class="value">\s*<span class="text">(?<value>[^<]*)</span>`
 4. Telefonnummer = `+43 662 453610-` + Durchwahl (Tel-DW).
